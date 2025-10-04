@@ -118,6 +118,49 @@ app.post("/taskslog", async (req, res) => {
     }
 });
 
+app.post("/arrivallog", async (req, res) => {
+    /**
+     * Logs the arrival of team
+     *
+     * Fist checks if team already hasn't been to checkpoint.
+     * If not, then inserts into arrival_log.
+     */
+    const { checkpoint, team, status } = req.body;
+    console.log(`POST request to /arrivallog from ${req.ip}`);
+
+    if (!checkpoint || !team || !status) {
+        res.sendStatus(400);
+    }
+
+    // Check if arrival isn't already logged
+    const log = await get(
+        "SELECT * FROM arrival_log WHERE checkpoint_id = ? AND team_id = ?",
+        [checkpoint, team]
+    );
+
+    if (log) {
+        console.log(log);
+        res.status(400);
+        throw new Error("Arrival already logged");
+    }
+
+    try {
+        const params = [checkpoint, team, status];
+        await run(
+            "INSERT INTO arrival_log (checkpoint_id, team_id, status) VALUES (?, ?, ?)",
+            params
+        );
+
+        res.sendStatus(200);
+    } catch (err) {
+        if (!res.status) {
+            res.status(500);
+        }
+
+        res.send("Failed to log arrival");
+    }
+});
+
 const PORT = process.env.BE_PORT || 3001;
 app.listen(PORT, () => {
     console.log(`server is running on port ${PORT}`);
