@@ -2,9 +2,6 @@ const express = require("express");
 const app = express();
 const cors = require("cors");
 
-const sqlite3 = require("sqlite3");
-const db = new sqlite3.Database("./records.db");
-
 const { run, get, all } = require("./helpers.js");
 
 app.use(express.json());
@@ -73,6 +70,18 @@ app.post("/taskslog", async (req, res) => {
     try {
         await run("BEGIN TRANSACTION");
 
+        // Check if tasks aren't already logged
+        const log = await get(
+            "SELECT * FROM arrival_log WHERE checkpoint_id = ? AND team_id = ? AND status = 'departed'",
+            [checkpoint, team]
+        );
+
+        if (log && log.status == "departed") {
+            console.log(log);
+            res.status(400);
+            throw new Error("Team already logged");
+        }
+
         // Insert each task separately
         for (const t of tasks) {
             const params = [t.id, team, t.completed ? 1 : 0];
@@ -101,7 +110,11 @@ app.post("/taskslog", async (req, res) => {
             console.log("Failed to rollback", rollbackErr);
         }
 
-        res.status(500).send("Failed to log tasks.");
+        if (!res.status) {
+            res.status(500);
+        }
+
+        res.send("Failed to log tasks.");
     }
 });
 
