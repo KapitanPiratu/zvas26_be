@@ -1,0 +1,7 @@
+node_modules
+dist
+.env
+
+records.db
+data.sql
+db.sh
