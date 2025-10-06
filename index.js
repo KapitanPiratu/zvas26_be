@@ -43,6 +43,24 @@ app.get("/teams", async (req, res) => {
             tasks.forEach((task) => {
                 if (task.completed) team.points += task.points;
             });
+
+            const arrival_logs = await all(
+                `SELECT
+                    arrival_log.*, checkpoint.name
+                FROM
+                    arrival_log
+                LEFT JOIN
+                    checkpoint
+                ON
+                    checkpoint.id = arrival_log.checkpoint_id
+                WHERE
+                    team_id = ?
+                ORDER BY
+                    created_at DESC`,
+                [team.id]
+            );
+
+            team.logs = arrival_logs;
         }
 
         res.send(rows);
