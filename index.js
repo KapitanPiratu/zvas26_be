@@ -2,9 +2,6 @@ const express = require("express");
 const app = express();
 const cors = require("cors");
 
-const sqlite3 = require("sqlite3");
-const db = new sqlite3.Database("./records.db");
-
 const { run, get, all } = require("./helpers.js");
 
 app.use(express.json());
@@ -17,11 +14,54 @@ app.get("/", (req, res) => {
 app.get("/teams", async (req, res) => {
     /**
      * Returns teams from db.
+     *
+     * First selects all teams from db.
+     * Then queries task_log for each team and calculates points from completed tasks.
      */
+
     console.log(`GET request to /teams from ${req.ip}`);
 
     try {
         const rows = await all("SELECT * FROM team");
+
+        for (const team of rows) {
+            team.points = 0;
+            const tasks = await all(
+                `SELECT
+                    task_log.*, task.points
+                FROM
+                    task_log
+                LEFT JOIN
+                    task
+                ON
+                    task.id = task_log.task_id
+                WHERE
+                    team_id = ?`,
+                [team.id]
+            );
+
+            tasks.forEach((task) => {
+                if (task.completed) team.points += task.points;
+            });
+
+            const arrival_logs = await all(
+                `SELECT
+                    arrival_log.*, checkpoint.name
+                FROM
+                    arrival_log
+                LEFT JOIN
+                    checkpoint
+                ON
+                    checkpoint.id = arrival_log.checkpoint_id
+                WHERE
+                    team_id = ?
+                ORDER BY
+                    created_at DESC`,
+                [team.id]
+            );
+
+            team.logs = arrival_logs;
+        }
 
         res.send(rows);
     } catch (err) {
@@ -73,6 +113,18 @@ app.post("/taskslog", async (req, res) => {
     try {
         await run("BEGIN TRANSACTION");
 
+        // Check if tasks aren't already logged
+        const log = await get(
+            "SELECT * FROM arrival_log WHERE checkpoint_id = ? AND team_id = ? AND status = 'departed'",
+            [checkpoint, team]
+        );
+
+        if (log && log.status == "departed") {
+            console.log(log);
+            res.status(400);
+            throw new Error("Team already logged");
+        }
+
         // Insert each task separately
         for (const t of tasks) {
             const params = [t.id, team, t.completed ? 1 : 0];
@@ -101,7 +153,54 @@ app.post("/taskslog", async (req, res) => {
             console.log("Failed to rollback", rollbackErr);
         }
 
-        res.status(500).send("Failed to log tasks.");
+        if (!res.status) {
+            res.status(500);
+        }
+
+        res.send("Failed to log tasks.");
+    }
+});
+
+app.post("/arrivallog", async (req, res) => {
+    /**
+     * Logs the arrival of team
+     *
+     * Fist checks if team already hasn't been to checkpoint.
+     * If not, then inserts into arrival_log.
+     */
+    const { checkpoint, team, status } = req.body;
+    console.log(`POST request to /arrivallog from ${req.ip}`);
+
+    if (!checkpoint || !team || !status) {
+        res.sendStatus(400);
+    }
+
+    // Check if arrival isn't already logged
+    const log = await get(
+        "SELECT * FROM arrival_log WHERE checkpoint_id = ? AND team_id = ?",
+        [checkpoint, team]
+    );
+
+    if (log) {
+        console.log(log);
+        res.status(400);
+        throw new Error("Arrival already logged");
+    }
+
+    try {
+        const params = [checkpoint, team, status];
+        await run(
+            "INSERT INTO arrival_log (checkpoint_id, team_id, status) VALUES (?, ?, ?)",
+            params
+        );
+
+        res.sendStatus(200);
+    } catch (err) {
+        if (!res.status) {
+            res.status(500);
+        }
+
+        res.send("Failed to log arrival");
     }
 });
 
