@@ -82,11 +82,14 @@ app.get("/tasks", async (req, res) => {
     const checkpoint = req.query.c;
 
     try {
-        const rows = await all(
-            `SELECT * FROM task${
-                checkpoint ? ` WHERE checkpoint_id = ${checkpoint}` : ""
-            }`
-        );
+        let query = "SELECT * FROM task";
+        const params = [];
+
+        if (checkpoint) {
+            query += " WHERE checkpoint_id = ?";
+            params.push(checkpoint);
+        }
+        const rows = await all(query, params);
 
         res.send(rows);
     } catch (err) {
@@ -104,10 +107,12 @@ app.post("/taskslog", async (req, res) => {
      */
 
     const { tasks, team, checkpoint } = req.body;
-    console.log(`POST request to /tasks from ${req.ip}`);
+    console.log(`POST request to /taskslog from ${req.ip}`);
 
     if (!tasks || !Array.isArray(tasks) || !team || !checkpoint) {
-        res.sendStatus(400);
+        return res.status(400).send({
+            error: "Missing required fields: tasks, team, or checkpoint.",
+        });
     }
 
     try {
@@ -120,9 +125,10 @@ app.post("/taskslog", async (req, res) => {
         );
 
         if (log && log.status == "departed") {
-            console.log(log);
-            res.status(400);
-            throw new Error("Team already logged");
+            await run("ROLLBACK"); // End the transaction
+            return res.status(400).send({
+                error: "Team has already departed from this checkpoint.",
+            });
         }
 
         // Insert each task separately
@@ -145,19 +151,17 @@ app.post("/taskslog", async (req, res) => {
 
         res.sendStatus(201);
     } catch (err) {
-        console.log("Transaction failed, rolling back:", err);
+        console.error("Transaction failed, rolling back:", err);
 
         try {
-            run("ROLLBACK");
+            await run("ROLLBACK");
         } catch (rollbackErr) {
-            console.log("Failed to rollback", rollbackErr);
+            console.error("Failed to rollback transaction:", rollbackErr);
         }
 
-        if (!res.status) {
-            res.status(500);
+        if (!res.headersSent) {
+            res.status(500).send({ error: "Failed to log tasks." });
         }
-
-        res.send("Failed to log tasks.");
     }
 });
 
@@ -172,22 +176,24 @@ app.post("/arrivallog", async (req, res) => {
     console.log(`POST request to /arrivallog from ${req.ip}`);
 
     if (!checkpoint || !team || !status) {
-        res.sendStatus(400);
-    }
-
-    // Check if arrival isn't already logged
-    const log = await get(
-        "SELECT * FROM arrival_log WHERE checkpoint_id = ? AND team_id = ?",
-        [checkpoint, team]
-    );
-
-    if (log) {
-        console.log(log);
-        res.status(400);
-        throw new Error("Arrival already logged");
+        return res.status(400).send({
+            error: "Missing required fields: checkpoint, team, or status.",
+        });
     }
 
     try {
+        // Check if arrival isn't already logged for this checkpoint
+        const log = await get(
+            "SELECT id FROM arrival_log WHERE checkpoint_id = ? AND team_id = ?",
+            [checkpoint, team]
+        );
+
+        if (log) {
+            return res.status(400).send({
+                error: "Team has already been logged at this checkpoint.",
+            });
+        }
+
         const params = [checkpoint, team, status];
         await run(
             "INSERT INTO arrival_log (checkpoint_id, team_id, status) VALUES (?, ?, ?)",
