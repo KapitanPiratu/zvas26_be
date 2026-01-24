@@ -2,7 +2,10 @@ const express = require("express");
 const app = express();
 const cors = require("cors");
 
-const { run, get, all } = require("./helpers.js");
+const { getTeams } = require("./routes/getteams.js");
+const { getTasks } = require("./routes/gettasks.js");
+const { postTaskslog } = require("./routes/posttaskslog.js");
+const { postArrivallog } = require("./routes/postarrivallog.js");
 
 app.use(express.json());
 app.use(cors());
@@ -11,203 +14,20 @@ app.get("/", (req, res) => {
     res.send({ msg: "hello" });
 });
 
-app.get("/teams", async (req, res) => {
-    /**
-     * Returns teams from db.
-     *
-     * First selects all teams from db.
-     * Then queries task_log for each team and calculates points from completed tasks.
-     */
-
-    console.log(`GET request to /teams from ${req.ip}`);
-
-    try {
-        const rows = await all("SELECT * FROM team");
-
-        for (const team of rows) {
-            team.points = 0;
-            const tasks = await all(
-                `SELECT
-                    task_log.*, task.points
-                FROM
-                    task_log
-                LEFT JOIN
-                    task
-                ON
-                    task.id = task_log.task_id
-                WHERE
-                    team_id = ?`,
-                [team.id]
-            );
-
-            tasks.forEach((task) => {
-                if (task.completed) team.points += task.points;
-            });
-
-            const arrival_logs = await all(
-                `SELECT
-                    arrival_log.*, checkpoint.name
-                FROM
-                    arrival_log
-                LEFT JOIN
-                    checkpoint
-                ON
-                    checkpoint.id = arrival_log.checkpoint_id
-                WHERE
-                    team_id = ?
-                ORDER BY
-                    created_at DESC`,
-                [team.id]
-            );
-
-            team.logs = arrival_logs;
-        }
-
-        res.send(rows);
-    } catch (err) {
-        console.log(err);
-        res.status(500).send("Failed to get teams");
-    }
+app.get("/teams", (req, res) => {
+    getTeams(req, res);
 });
 
-app.get("/tasks", async (req, res) => {
-    /**
-     * Returns tasks from db.
-     *
-     * If the request query contains checkpoint_id (c), only tasks for this checkpoint are returned.
-     * Otherwise all tasks will be returned.
-     */
-
-    console.log(`GET request to /tasks from ${req.ip}`);
-    const checkpoint = req.query.c;
-
-    try {
-        let query = "SELECT * FROM task";
-        const params = [];
-
-        if (checkpoint) {
-            query += " WHERE checkpoint_id = ?";
-            params.push(checkpoint);
-        }
-        const rows = await all(query, params);
-
-        res.send(rows);
-    } catch (err) {
-        console.log(err);
-        res.status(500).send("Failed to get tasks");
-    }
+app.get("/tasks", (req, res) => {
+    getTasks(req, res);
 });
 
-app.post("/taskslog", async (req, res) => {
-    /**
-     * Inserts tasks of one team from checkpoint into db
-     *
-     * First inserts each task into task_log with completion status.
-     * Then inserts into arrival_log the departion status of the team from checkpoint.
-     */
-
-    const { tasks, team, checkpoint } = req.body;
-    console.log(`POST request to /taskslog from ${req.ip}`);
-
-    if (!tasks || !Array.isArray(tasks) || !team || !checkpoint) {
-        return res.status(400).send({
-            error: "Missing required fields: tasks, team, or checkpoint.",
-        });
-    }
-
-    try {
-        await run("BEGIN TRANSACTION");
-
-        // Check if tasks aren't already logged
-        const log = await get(
-            "SELECT * FROM arrival_log WHERE checkpoint_id = ? AND team_id = ? AND status = 'departed'",
-            [checkpoint, team]
-        );
-
-        if (log && log.status == "departed") {
-            await run("ROLLBACK"); // End the transaction
-            return res.status(400).send({
-                error: "Team has already departed from this checkpoint.",
-            });
-        }
-
-        // Insert each task separately
-        for (const t of tasks) {
-            const params = [t.id, team, t.completed ? 1 : 0];
-            await run(
-                "INSERT INTO task_log (task_id, team_id, completed) VALUES (?, ?, ?)",
-                params
-            );
-        }
-
-        // Log the departion of team from the checkpoint
-        const params = [checkpoint, team, "departed"];
-        await run(
-            "INSERT INTO arrival_log (checkpoint_id, team_id, status) VALUES (?, ?, ?)",
-            params
-        );
-
-        await run("COMMIT");
-
-        res.sendStatus(201);
-    } catch (err) {
-        console.error("Transaction failed, rolling back:", err);
-
-        try {
-            await run("ROLLBACK");
-        } catch (rollbackErr) {
-            console.error("Failed to rollback transaction:", rollbackErr);
-        }
-
-        if (!res.headersSent) {
-            res.status(500).send({ error: "Failed to log tasks." });
-        }
-    }
+app.post("/taskslog", (req, res) => {
+    postTaskslog(req, res);
 });
 
-app.post("/arrivallog", async (req, res) => {
-    /**
-     * Logs the arrival of team
-     *
-     * Fist checks if team already hasn't been to checkpoint.
-     * If not, then inserts into arrival_log.
-     */
-    const { checkpoint, team, status } = req.body;
-    console.log(`POST request to /arrivallog from ${req.ip}`);
-
-    if (!checkpoint || !team || !status) {
-        return res.status(400).send({
-            error: "Missing required fields: checkpoint, team, or status.",
-        });
-    }
-
-    try {
-        // Check if arrival isn't already logged for this checkpoint
-        const log = await get(
-            "SELECT id FROM arrival_log WHERE checkpoint_id = ? AND team_id = ?",
-            [checkpoint, team]
-        );
-
-        if (log) {
-            return res.status(400).send({
-                error: "Team has already been logged at this checkpoint.",
-            });
-        }
-
-        const params = [checkpoint, team, status];
-        await run(
-            "INSERT INTO arrival_log (checkpoint_id, team_id, status) VALUES (?, ?, ?)",
-            params
-        );
-
-        res.sendStatus(200);
-    } catch (err) {
-        if (!res.status) {
-            res.status(500);
-        }
-
-        res.send("Failed to log arrival");
-    }
+app.post("/arrivallog", (req, res) => {
+    postArrivallog(req, res);
 });
 
 const PORT = process.env.BE_PORT || 3001;
