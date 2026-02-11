@@ -2,7 +2,8 @@ PRAGMA foreign_keys=ON;
 
 CREATE TABLE IF NOT EXISTS checkpoint (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL
+    name TEXT NOT NULL,
+    key TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS team (
