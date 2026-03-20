@@ -8,7 +8,9 @@ async function postArrivallog(req, res) {
      * If not, then inserts into arrival_log.
      */
     const { checkpoint, team, status } = req.body;
-    console.log(`POST request to /arrivallog from ${req.ip}`);
+    console.log(
+        `POST request to /arrivallog from ${req.ip}, checkpoint: ${req.query.key} body: ${JSON.stringify(req.body)}`,
+    );
 
     if (!checkpoint || !team || !status) {
         return res.status(400).send({

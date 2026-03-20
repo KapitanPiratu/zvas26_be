@@ -9,7 +9,9 @@ async function postTaskslog(req, res) {
      */
 
     const { tasks, team, checkpoint } = req.body;
-    console.log(`POST request to /taskslog from ${req.ip}`);
+    console.log(
+        `POST request to /taskslog from ${req.ip}, checkpoint: ${req.query.key} body: ${JSON.stringify(req.body)}`,
+    );
 
     if (!tasks || !Array.isArray(tasks) || !team || !checkpoint) {
         return res.status(400).send({

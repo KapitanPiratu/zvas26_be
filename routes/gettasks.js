@@ -8,7 +8,7 @@ async function getTasks(req, res) {
      * Otherwise all tasks will be returned.
      */
 
-    console.log(`GET request to /tasks from ${req.ip}`);
+    // console.log(`GET request to /tasks from ${req.ip}`);
     const checkpoint = req.query.c;
 
     try {

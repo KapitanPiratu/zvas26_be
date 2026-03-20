@@ -8,7 +8,7 @@ async function getTeams(req, res) {
      * Then queries task_log for each team and calculates points from completed tasks.
      */
 
-    console.log(`GET request to /teams from ${req.ip}`);
+    // console.log(`GET request to /teams from ${req.ip}`);
 
     try {
         const rows = await all("SELECT * FROM team");
