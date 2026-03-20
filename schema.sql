@@ -10,7 +10,8 @@ CREATE TABLE IF NOT EXISTS team (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
     organization TEXT,
-    members TEXT
+    members TEXT,
+    path TEXT
 );
 
 CREATE TABLE IF NOT EXISTS task (

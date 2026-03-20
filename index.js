@@ -7,6 +7,7 @@ const { getTasks } = require("./routes/gettasks.js");
 const { postTaskslog } = require("./routes/posttaskslog.js");
 const { postArrivallog } = require("./routes/postarrivallog.js");
 const { checkpointCheck } = require("./routes/checkpointcheck.js");
+const { postNewTeam } = require("./routes/postteam.js");
 
 app.use(express.json());
 app.use(cors());
@@ -33,6 +34,10 @@ app.post("/arrivallog", (req, res) => {
 
 app.post("/checkpoint", (req, res) => {
     checkpointCheck(req, res);
+});
+
+app.post("/newteam", (req, res) => {
+    postNewTeam(req, res);
 });
 
 const PORT = process.env.BE_PORT || 3001;
