@@ -5,7 +5,9 @@ async function postNewTeam(req, res) {
      * Creates new team in db
      */
     const { name, organization, path } = req.body;
-    console.log(`POST request to /newteam from ${req.ip}`);
+    console.log(
+        `POST request to /newteam from ${req.ip}, body: ${JSON.stringify(req.body)}`,
+    );
 
     if (!name || !organization || !path) {
         return res.status(400).send({
