@@ -51,6 +51,11 @@ async function postTaskslog(req, res) {
             params,
         );
 
+        //update the teams path
+        let teamPath = await get("SELECT path FROM team WHERE id = ?", [team]);
+        const path = teamPath.path.slice(1);
+        await run("UPDATE team SET path = ? WHERE id = ?", [path, team]);
+
         await run("COMMIT");
 
         res.sendStatus(201);
