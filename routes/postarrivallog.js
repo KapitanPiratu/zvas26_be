@@ -55,7 +55,7 @@ async function postArrivallog(req, res) {
         if (teamPath.path[0] != checkpoint) {
             await run("ROLLBACK");
             return res.status(400).send({
-                error: `Tým je na špatném stanovišti, má být na: ${teamPath.path[0]}`,
+                error: `Tým je na špatném stanovišti, má být na: ${teamPath.path[0] == "0" ? "10" : teamPath.path[0]}`,
             });
         }
 
