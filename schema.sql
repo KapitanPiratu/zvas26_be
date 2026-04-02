@@ -11,7 +11,7 @@ CREATE TABLE IF NOT EXISTS team (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
     organization TEXT,
-    members TEXT,
+    path_all TEXT,
     path TEXT
 );
 
