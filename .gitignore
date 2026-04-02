@@ -3,5 +3,5 @@ dist
 .env
 
 records.db
-data.sql
+data*.sql
 db.sh

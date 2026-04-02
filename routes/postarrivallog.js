@@ -21,6 +21,19 @@ async function postArrivallog(req, res) {
     try {
         await run("BEGIN TRANSACTION");
 
+        // Check if team isn't already departed
+        const departureLog = await get(
+            "SELECT id FROM arrival_log WHERE checkpoint_id = ? AND team_id = ? AND status = 'departed'",
+            [checkpoint, team],
+        );
+
+        if (departureLog) {
+            await run("ROLLBACK");
+            return res.status(400).send({
+                error: "Tým už tvé stanoviště opustil. Pokud ještě potřebuješ zpětně změnit hodnocení, kontaktuj Uršulu",
+            });
+        }
+
         // Check if arrival isn't already logged for this checkpoint
         const log = await get(
             "SELECT id FROM arrival_log WHERE checkpoint_id = ? AND team_id = ?",
@@ -29,8 +42,8 @@ async function postArrivallog(req, res) {
 
         if (log) {
             await run("ROLLBACK");
-            return res.status(400).send({
-                error: "Team has already been logged at this checkpoint.",
+            return res.status(200).send({
+                error: "Příchod týmu na stanoviště už byl zapsán",
             });
         }
 
@@ -39,13 +52,10 @@ async function postArrivallog(req, res) {
             team,
         ]);
 
-        console.log("---------");
-        console.log(teamPath.path[0]);
-
         if (teamPath.path[0] != checkpoint) {
             await run("ROLLBACK");
             return res.status(400).send({
-                error: `Wrong checkpoint, hint: ${teamPath.path[0]}`,
+                error: `Tým je na špatném stanovišti, má být na: ${teamPath.path[0]}`,
             });
         }
 
@@ -68,7 +78,9 @@ async function postArrivallog(req, res) {
         }
 
         if (!res.headersSent) {
-            res.status(500).send("Failed to log arrival");
+            res.status(500).send({
+                error: "Toto je technický problém, kontaktuj prosím Uršulu. Nápověda: Failed to log arrival",
+            });
         }
     }
 }
