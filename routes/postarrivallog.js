@@ -52,10 +52,15 @@ async function postArrivallog(req, res) {
             team,
         ]);
 
-        if (teamPath.path[0] != checkpoint) {
+        let nextCheckpoint = teamPath.path[0];
+        if (nextCheckpoint == "0") {
+            nextCheckpoint = "10";
+        }
+
+        if (nextCheckpoint != checkpoint) {
             await run("ROLLBACK");
             return res.status(400).send({
-                error: `Tým je na špatném stanovišti, má být na: ${teamPath.path[0] == "0" ? "10" : teamPath.path[0]}`,
+                error: `Tým je na špatném stanovišti, má být na: ${nextCheckpoint}`,
             });
         }
 
