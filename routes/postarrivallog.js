@@ -19,6 +19,21 @@ async function postArrivallog(req, res) {
     }
 
     try {
+        await run("BEGIN TRANSACTION");
+
+        // Check if team isn't already departed
+        const departureLog = await get(
+            "SELECT id FROM arrival_log WHERE checkpoint_id = ? AND team_id = ? AND status = 'departed'",
+            [checkpoint, team],
+        );
+
+        if (departureLog) {
+            await run("ROLLBACK");
+            return res.status(400).send({
+                error: "Tým už tvé stanoviště opustil. Pokud ještě potřebuješ zpětně změnit hodnocení, kontaktuj Uršulu",
+            });
+        }
+
         // Check if arrival isn't already logged for this checkpoint
         const log = await get(
             "SELECT id FROM arrival_log WHERE checkpoint_id = ? AND team_id = ?",
@@ -26,8 +41,26 @@ async function postArrivallog(req, res) {
         );
 
         if (log) {
+            await run("ROLLBACK");
+            return res.status(200).send({
+                error: "Příchod týmu na stanoviště už byl zapsán",
+            });
+        }
+
+        // Check if the team is on correct checkpoint
+        const teamPath = await get("SELECT path FROM team WHERE id = ?", [
+            team,
+        ]);
+
+        let nextCheckpoint = teamPath.path[0];
+        if (nextCheckpoint == "0") {
+            nextCheckpoint = "10";
+        }
+
+        if (nextCheckpoint != checkpoint) {
+            await run("ROLLBACK");
             return res.status(400).send({
-                error: "Team has already been logged at this checkpoint.",
+                error: `Tým je na špatném stanovišti, má být na: ${nextCheckpoint}`,
             });
         }
 
@@ -37,13 +70,23 @@ async function postArrivallog(req, res) {
             params,
         );
 
+        await run("COMMIT");
+
         res.sendStatus(200);
     } catch (err) {
-        if (!res.status) {
-            res.status(500);
+        console.error("Transaction failed, rolling back:", err);
+
+        try {
+            await run("ROLLBACK");
+        } catch (rollbackErr) {
+            console.error("Failed to rollback transaction:", rollbackErr);
         }
 
-        res.send("Failed to log arrival");
+        if (!res.headersSent) {
+            res.status(500).send({
+                error: "Toto je technický problém, kontaktuj prosím Uršulu. Nápověda: Failed to log arrival",
+            });
+        }
     }
 }
 

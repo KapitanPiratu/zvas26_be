@@ -25,9 +25,9 @@ async function postNewTeam(req, res) {
             });
         }
 
-        const params = [name, organization, path];
+        const params = [name, organization, path, path];
         await run(
-            "INSERT INTO team (name, organization, path) VALUES (?, ?, ?)",
+            "INSERT INTO team (name, organization, path_all, path) VALUES (?, ?, ?, ?)",
             params,
         );
 
@@ -37,11 +37,13 @@ async function postNewTeam(req, res) {
 
         res.status(201).send(createdId);
     } catch (err) {
+        console.error(err);
+
         if (!res.status) {
             res.status(500);
         }
 
-        res.send("Failed to log arrival");
+        res.send("Failed to create team");
     }
 }
 

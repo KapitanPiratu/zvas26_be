@@ -1,4 +1,5 @@
 PRAGMA foreign_keys=ON;
+PRAGMA busy_timeout=5000;
 
 CREATE TABLE IF NOT EXISTS checkpoint (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -10,7 +11,7 @@ CREATE TABLE IF NOT EXISTS team (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
     organization TEXT,
-    members TEXT,
+    path_all TEXT,
     path TEXT
 );
 

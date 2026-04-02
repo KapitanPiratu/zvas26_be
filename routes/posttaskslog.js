@@ -51,6 +51,11 @@ async function postTaskslog(req, res) {
             params,
         );
 
+        //update the teams path
+        let teamPath = await get("SELECT path FROM team WHERE id = ?", [team]);
+        const path = teamPath.path.slice(1);
+        await run("UPDATE team SET path = ? WHERE id = ?", [path, team]);
+
         await run("COMMIT");
 
         res.sendStatus(201);
@@ -64,7 +69,9 @@ async function postTaskslog(req, res) {
         }
 
         if (!res.headersSent) {
-            res.status(500).send({ error: "Failed to log tasks." });
+            res.status(500).send({
+                error: "Toto je technický progblém, kontaktuj prosím Uršulu. Nápověda: Failed to log tasks.",
+            });
         }
     }
 }
