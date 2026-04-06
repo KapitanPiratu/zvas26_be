@@ -1,6 +1,12 @@
 const sqlite3 = require("sqlite3");
 const db = new sqlite3.Database("./records.db");
 
+db.serialize(() => {
+    db.run("PRAGMA journal_mode = WAL;");
+    db.run("PRAGMA busy_timeout = 10000;");
+    db.run("PRAGMA foreign_keys = ON;");
+});
+
 const run = (sql, params = []) => {
     return new Promise((resolve, reject) => {
         db.run(sql, params, (err) => {
