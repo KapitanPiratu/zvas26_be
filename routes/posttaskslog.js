@@ -1,4 +1,4 @@
-const { get, run } = require("../helpers");
+const { get, run, execSync } = require("../helpers");
 
 async function postTaskslog(req, res) {
     /**
@@ -20,53 +20,61 @@ async function postTaskslog(req, res) {
     }
 
     try {
-        await run("BEGIN TRANSACTION");
+        await execSync(async () => {
+            await run("BEGIN TRANSACTION");
 
-        // Check if tasks aren't already logged
-        const log = await get(
-            "SELECT * FROM arrival_log WHERE checkpoint_id = ? AND team_id = ? AND status = 'departed'",
-            [checkpoint, team],
-        );
+            try {
+                // Check if tasks aren't already logged
+                const log = await get(
+                    "SELECT * FROM arrival_log WHERE checkpoint_id = ? AND team_id = ? AND status = 'departed'",
+                    [checkpoint, team],
+                );
 
-        if (log && log.status == "departed") {
-            await run("ROLLBACK"); // End the transaction
-            return res.status(400).send({
-                error: "Team has already departed from this checkpoint.",
-            });
+                if (log && log.status == "departed") {
+                    await run("ROLLBACK");
+                    return res.status(400).send({
+                        error: "Team has already departed from this checkpoint.",
+                    });
+                }
+
+                // Insert each task separately
+                for (const t of tasks) {
+                    const params = [t.id, team, t.completed ? 1 : 0];
+                    await run(
+                        "INSERT INTO task_log (task_id, team_id, completed) VALUES (?, ?, ?)",
+                        params,
+                    );
+                }
+
+                // Log the departion of team from the checkpoint
+                const params = [checkpoint, team, "departed"];
+                await run(
+                    "INSERT INTO arrival_log (checkpoint_id, team_id, status) VALUES (?, ?, ?)",
+                    params,
+                );
+
+                //update the teams path
+                let teamPath = await get("SELECT path FROM team WHERE id = ?", [
+                    team,
+                ]);
+                const path = teamPath.path.slice(1);
+                await run("UPDATE team SET path = ? WHERE id = ?", [
+                    path,
+                    team,
+                ]);
+
+                await run("COMMIT");
+            } catch (err) {
+                await run("ROLLBACK");
+                throw err;
+            }
+        });
+
+        if (!res.headersSent) {
+            res.sendStatus(201);
         }
-
-        // Insert each task separately
-        for (const t of tasks) {
-            const params = [t.id, team, t.completed ? 1 : 0];
-            await run(
-                "INSERT INTO task_log (task_id, team_id, completed) VALUES (?, ?, ?)",
-                params,
-            );
-        }
-
-        // Log the departion of team from the checkpoint
-        const params = [checkpoint, team, "departed"];
-        await run(
-            "INSERT INTO arrival_log (checkpoint_id, team_id, status) VALUES (?, ?, ?)",
-            params,
-        );
-
-        //update the teams path
-        let teamPath = await get("SELECT path FROM team WHERE id = ?", [team]);
-        const path = teamPath.path.slice(1);
-        await run("UPDATE team SET path = ? WHERE id = ?", [path, team]);
-
-        await run("COMMIT");
-
-        res.sendStatus(201);
     } catch (err) {
-        console.error("Transaction failed, rolling back:", err);
-
-        try {
-            await run("ROLLBACK");
-        } catch (rollbackErr) {
-            console.error("Failed to rollback transaction:", rollbackErr);
-        }
+        console.error("Transaction failed:", err);
 
         if (!res.headersSent) {
             res.status(500).send({

@@ -1,4 +1,4 @@
-const { get, run } = require("../helpers");
+const { get, run, execSync } = require("../helpers");
 
 async function postArrivallog(req, res) {
     /**
@@ -19,68 +19,72 @@ async function postArrivallog(req, res) {
     }
 
     try {
-        await run("BEGIN TRANSACTION");
+        await execSync(async () => {
+            await run("BEGIN TRANSACTION");
 
-        // Check if team isn't already departed
-        const departureLog = await get(
-            "SELECT id FROM arrival_log WHERE checkpoint_id = ? AND team_id = ? AND status = 'departed'",
-            [checkpoint, team],
-        );
+            try {
+                // Check if team isn't already departed
+                const departureLog = await get(
+                    "SELECT id FROM arrival_log WHERE checkpoint_id = ? AND team_id = ? AND status = 'departed'",
+                    [checkpoint, team],
+                );
 
-        if (departureLog) {
-            await run("ROLLBACK");
-            return res.status(400).send({
-                error: "Tým už tvé stanoviště opustil. Pokud ještě potřebuješ zpětně změnit hodnocení, kontaktuj Uršulu",
-            });
+                if (departureLog) {
+                    await run("ROLLBACK");
+                    return res.status(400).send({
+                        error: "Tým už tvé stanoviště opustil. Pokud ještě potřebuješ zpětně změnit hodnocení, kontaktuj Uršulu",
+                    });
+                }
+
+                // Check if arrival isn't already logged for this checkpoint
+                const log = await get(
+                    "SELECT id FROM arrival_log WHERE checkpoint_id = ? AND team_id = ?",
+                    [checkpoint, team],
+                );
+
+                if (log) {
+                    await run("ROLLBACK");
+                    return res.status(200).send({
+                        error: "Příchod týmu na stanoviště už byl zapsán",
+                    });
+                }
+
+                // Check if the team is on correct checkpoint
+                const teamPath = await get(
+                    "SELECT path FROM team WHERE id = ?",
+                    [team],
+                );
+
+                let nextCheckpoint = teamPath.path[0];
+                if (nextCheckpoint == "0") {
+                    nextCheckpoint = "10";
+                }
+
+                if (nextCheckpoint != checkpoint) {
+                    await run("ROLLBACK");
+                    return res.status(400).send({
+                        error: `Tým je na špatném stanovišti, má být na: ${nextCheckpoint}`,
+                    });
+                }
+
+                const params = [checkpoint, team, status];
+                await run(
+                    "INSERT INTO arrival_log (checkpoint_id, team_id, status) VALUES (?, ?, ?)",
+                    params,
+                );
+
+                await run("COMMIT");
+            } catch (err) {
+                await run("ROLLBACK");
+                throw err;
+            }
+        });
+
+        if (!res.headersSent) {
+            res.sendStatus(200);
         }
-
-        // Check if arrival isn't already logged for this checkpoint
-        const log = await get(
-            "SELECT id FROM arrival_log WHERE checkpoint_id = ? AND team_id = ?",
-            [checkpoint, team],
-        );
-
-        if (log) {
-            await run("ROLLBACK");
-            return res.status(200).send({
-                error: "Příchod týmu na stanoviště už byl zapsán",
-            });
-        }
-
-        // Check if the team is on correct checkpoint
-        const teamPath = await get("SELECT path FROM team WHERE id = ?", [
-            team,
-        ]);
-
-        let nextCheckpoint = teamPath.path[0];
-        if (nextCheckpoint == "0") {
-            nextCheckpoint = "10";
-        }
-
-        if (nextCheckpoint != checkpoint) {
-            await run("ROLLBACK");
-            return res.status(400).send({
-                error: `Tým je na špatném stanovišti, má být na: ${nextCheckpoint}`,
-            });
-        }
-
-        const params = [checkpoint, team, status];
-        await run(
-            "INSERT INTO arrival_log (checkpoint_id, team_id, status) VALUES (?, ?, ?)",
-            params,
-        );
-
-        await run("COMMIT");
-
-        res.sendStatus(200);
     } catch (err) {
-        console.error("Transaction failed, rolling back:", err);
-
-        try {
-            await run("ROLLBACK");
-        } catch (rollbackErr) {
-            console.error("Failed to rollback transaction:", rollbackErr);
-        }
+        console.error("Transaction failed:", err);
 
         if (!res.headersSent) {
             res.status(500).send({

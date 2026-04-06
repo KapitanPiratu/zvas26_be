@@ -1,4 +1,4 @@
-const { get, run } = require("../helpers");
+const { get, run, execSync } = require("../helpers");
 
 async function postNewTeam(req, res) {
     /**
@@ -16,34 +16,36 @@ async function postNewTeam(req, res) {
     }
 
     try {
-        // Check if team with same name isn't already in db
-        const log = await get("SELECT id FROM team WHERE name = ?", [name]);
+        await execSync(async () => {
+            // Check if team with same name isn't already in db
+            const log = await get("SELECT id FROM team WHERE name = ?", [name]);
 
-        if (log) {
-            return res.status(400).send({
-                error: "Team already exists.",
-            });
-        }
+            if (log) {
+                return res.status(400).send({
+                    error: "Team already exists.",
+                });
+            }
 
-        const params = [name, organization, path, path];
-        await run(
-            "INSERT INTO team (name, organization, path_all, path) VALUES (?, ?, ?, ?)",
-            params,
-        );
+            const params = [name, organization, path, path];
+            await run(
+                "INSERT INTO team (name, organization, path_all, path) VALUES (?, ?, ?, ?)",
+                params,
+            );
 
-        const createdId = await get("SELECT id FROM team WHERE name = ?", [
-            name,
-        ]);
+            const createdId = await get("SELECT id FROM team WHERE name = ?", [
+                name,
+            ]);
 
-        res.status(201).send(createdId);
+            if (!res.headersSent) {
+                res.status(201).send(createdId);
+            }
+        });
     } catch (err) {
         console.error(err);
 
-        if (!res.status) {
-            res.status(500);
+        if (!res.headersSent) {
+            res.status(500).send("Failed to create team");
         }
-
-        res.send("Failed to create team");
     }
 }
 

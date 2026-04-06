@@ -5,5 +5,5 @@ dist
 records.db
 data*.sql
 db.sh
-.db-shm
-.db-wal
+*.db-shm
+*.db-wal

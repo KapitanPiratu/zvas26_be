@@ -37,4 +37,16 @@ const all = (sql, params = []) => {
     });
 };
 
-module.exports = { run, get, all };
+let dbQueue = Promise.resolve();
+
+/**
+ * Ensures that the provided async task runs exclusively,
+ * preventing overlapping database transactions.
+ */
+const execSync = (task) => {
+    const result = dbQueue.then(() => task());
+    dbQueue = result.catch(() => {});
+    return result;
+};
+
+module.exports = { run, get, all, execSync };
