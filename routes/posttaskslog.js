@@ -78,7 +78,7 @@ async function postTaskslog(req, res) {
 
         if (!res.headersSent) {
             res.status(500).send({
-                error: "Toto je technický progblém, kontaktuj prosím Uršulu. Nápověda: Failed to log tasks.",
+                error: "Toto je technický problém, zkus to znova a pokud problém přetrvává, kontaktuj prosím Uršulu. Nápověda: Failed to log tasks.",
             });
         }
     }

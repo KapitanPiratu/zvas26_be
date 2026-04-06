@@ -88,7 +88,7 @@ async function postArrivallog(req, res) {
 
         if (!res.headersSent) {
             res.status(500).send({
-                error: "Toto je technický problém, kontaktuj prosím Uršulu. Nápověda: Failed to log arrival",
+                error: "Toto je technický problém, zkus to znova a pokud problém přetrvává, kontaktuj prosím Uršulu. Nápověda: Failed to log arrival",
             });
         }
     }
