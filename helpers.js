@@ -1,6 +1,12 @@
 const sqlite3 = require("sqlite3");
 const db = new sqlite3.Database("./records.db");
 
+db.serialize(() => {
+    db.run("PRAGMA journal_mode = WAL;");
+    db.run("PRAGMA busy_timeout = 10000;");
+    db.run("PRAGMA foreign_keys = ON;");
+});
+
 const run = (sql, params = []) => {
     return new Promise((resolve, reject) => {
         db.run(sql, params, (err) => {
@@ -31,4 +37,16 @@ const all = (sql, params = []) => {
     });
 };
 
-module.exports = { run, get, all };
+let dbQueue = Promise.resolve();
+
+/**
+ * Ensures that the provided async task runs exclusively,
+ * preventing overlapping database transactions.
+ */
+const execSync = (task) => {
+    const result = dbQueue.then(() => task());
+    dbQueue = result.catch(() => {});
+    return result;
+};
+
+module.exports = { run, get, all, execSync };
